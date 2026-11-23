@@ -65,10 +65,10 @@ th{background:#faf7f2}
 
 <label>Content Type</label>
 <select id="content_type">
-<option value="Bhajan">Bhajan</option>
-<option value="Shloka">Shloka</option>
-<option value="Aarti">Aarti</option>
-<option value="Quote">Daily Quote</option>
+<option value="bhajan">Bhajan</option>
+<option value="gita_shlok">Gita Shlok</option>
+<option value="aarti">Aarti</option>
+<option value="quote">Daily Quote</option>
 </select>
 
 <label>Category (Ram / Krishna / Geeta / Ramayan etc.)</label>
@@ -114,10 +114,10 @@ th{background:#faf7f2}
 <label>Filter Content</label>
 <select id="filterType" onchange="loadContent()">
 <option value="">All Content</option>
-<option value="Bhajan">Bhajan</option>
-<option value="Shloka">Shloka</option>
-<option value="Aarti">Aarti</option>
-<option value="Quote">Daily Quote</option>
+<option value="bhajan">Bhajan</option>
+<option value="gita_shlok">Gita Shlok</option>
+<option value="aarti">Aarti</option>
+<option value="quote">Daily Quote</option>
 </select>
 <button class="secondary" onclick="loadContent()">Refresh</button>
 <button class="danger" onclick="logout()">Logout</button>
@@ -256,7 +256,7 @@ function editContent(id){
   const c=contents.find(x=>x.id===id);
   if(!c)return;
   document.getElementById("editId").value=c.id;
-  document.getElementById("content_type").value=c.content_type||"Bhajan";
+  document.getElementById("content_type").value=c.content_type||"bhajan";
   document.getElementById("category").value=c.category||"";
   document.getElementById("title").value=c.title||"";
   document.getElementById("sanskrit").value=c.sanskrit||"";
