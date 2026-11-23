@@ -33,4 +33,71 @@
 const pages=['home','gita','geet','aarti','quotes','contact','admin'];function showPage(p){pages.forEach(x=>document.getElementById(x).classList.toggle('show',x===p));document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===p));window.scrollTo({top:0,behavior:'smooth'});if(p==='admin')renderAdmin();if(p==='quotes')renderQuotes()}document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>showPage(b.dataset.page)));
 function filterItems(listId,inputId){let q=document.getElementById(inputId).value.toLowerCase();document.querySelectorAll('#'+listId+' .item').forEach(el=>el.classList.toggle('hidden',!el.innerText.toLowerCase().includes(q)))}
 let quotes=[['जो तुम्हारे नियंत्रण में है, उस पर ध्यान दो; जो नहीं है, उसे कृष्ण के चरणों में समर्पित कर दो।','Focus on your duty; offer what you cannot control to Krishna.'],['मन को कृष्ण के स्मरण में रखो, कर्म को प्रेम से करो और चिंता को धीरे-धीरे छोड़ दो।','Remember Krishna, act with love, and let worry soften.'],['जहाँ कृष्ण का स्मरण है, वहाँ आशा का दीप जलता रहता है।','Where Krishna is remembered, the lamp of hope keeps glowing.'],['फल की चिंता छोड़कर अपना कर्म कृष्ण को अर्पित करो।','Release anxiety over results and offer your work to Krishna.'],['प्रेम, सेवा और नाम-स्मरण—भक्ति का सरल मार्ग है।','Love, service, and remembrance are a simple path of devotion.']];let qi=0;function nextQuote(){qi=(qi+1)%quotes.length;document.getElementById('quoteDisplay').innerText='“'+quotes[qi][0]+'”';document.getElementById('quoteEnglish').innerText=quotes[qi][1]}function readData(){try{return JSON.parse(localStorage.getItem('bhaktiContent')||'[]')}catch(e){return []}}function saveContent(e){e.preventDefault();let data=readData();data.push({id:Date.now(),type:document.getElementById('type').value,category:document.getElementById('category').value,title:document.getElementById('title').value,hindi:document.getElementById('hindi').value,hinglish:document.getElementById('hinglish').value,description:document.getElementById('description').value,date:document.getElementById('publishDate').value,status:document.getElementById('status').value});localStorage.setItem('bhaktiContent',JSON.stringify(data));e.target.reset();renderAdmin();alert('Content saved in this browser. Connect a live database for website-wide publishing.')}function renderAdmin(){let arr=readData();let host=document.getElementById('adminSaved');host.innerHTML=arr.length?arr.map(x=>`<div class="item" style="margin:10px 0"><b>${escapeHtml(x.title)}</b> · ${escapeHtml(x.type)} · ${escapeHtml(x.status)}<p>${escapeHtml(x.hindi||x.description||'')}</p><button class="btn" onclick="removeContent(${x.id})">Delete</button></div>`).join(''):'<p class="muted">No saved content yet. Add your first Krishna entry above.</p>'}function removeContent(id){localStorage.setItem('bhaktiContent',JSON.stringify(readData().filter(x=>x.id!==id)));renderAdmin()}function exportContent(){let blob=new Blob([JSON.stringify(readData(),null,2)],{type:'application/json'});let a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='bhakti-sagar-content.json';a.click();URL.revokeObjectURL(a.href)}function escapeHtml(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function renderQuotes(){let host=document.getElementById('quoteList');host.innerHTML=quotes.map(q=>`<div class="item"><h3>${escapeHtml(q[0])}</h3><p class="muted">${escapeHtml(q[1])}</p></div>`).join('')}function contactSubmit(e){e.preventDefault();document.getElementById('contactResult').innerText='Thanks! Contact form demo submitted locally. A live contact backend can be connected later.';e.target.reset()}
+
+const FRONTEND_SUPABASE_URL = "https://oibpfwbuzjbumgwvhoqb.supabase.co";
+const FRONTEND_SUPABASE_KEY = "sb_publishable_wlC6YV3wl9v_gPvVmZSNPA_YcZQuDVa";
+
+const frontendDB = window.supabase.createClient(
+  FRONTEND_SUPABASE_URL,
+  FRONTEND_SUPABASE_KEY
+);
+
+async function loadPublishedBhaktiContent() {
+  const { data, error } = await frontendDB
+    .from("devotional_content")
+    .select("*")
+    .eq("status", "published")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Bhakti content loading error:", error);
+    return;
+  }
+
+  const rows = data || [];
+
+  function safe(value) {
+    const div = document.createElement("div");
+    div.textContent = value || "";
+    return div.innerHTML;
+  }
+
+  function card(item, typeLabel) {
+    return `
+      <div class="item">
+        <span class="pill">${safe(item.category || typeLabel)}</span>
+        <h3>${safe(item.title)}</h3>
+        ${item.sanskrit ? `<p>${safe(item.sanskrit)}</p>` : ""}
+        ${item.hinglish ? `<p class="muted">${safe(item.hinglish)}</p>` : ""}
+        ${item.hindi ? `<p>${safe(item.hindi)}</p>` : ""}
+        ${item.english ? `<p>${safe(item.english)}</p>` : ""}
+        ${item.explanation ? `<b>Meaning:</b><p>${safe(item.explanation)}</p>` : ""}
+        ${item.media_url ? `<p><a href="${safe(item.media_url)}" target="_blank" rel="noopener">Listen / View Media</a></p>` : ""}
+      </div>
+    `;
+  }
+
+  const gita = rows.filter(x => x.content_type === "gita_shlok");
+  const bhajans = rows.filter(x => x.content_type === "bhajan");
+  const aartis = rows.filter(x => x.content_type === "aarti");
+  const quoteRows = rows.filter(x => x.content_type === "quote");
+
+  document.getElementById("gitaList").innerHTML =
+    gita.length ? gita.map(x => card(x, "Gita Shlok")).join("") :
+    `<div class="item">No published Gita shlok available yet.</div>`;
+
+  document.getElementById("geetList").innerHTML =
+    bhajans.length ? bhajans.map(x => card(x, "Bhajan")).join("") :
+    `<div class="item">No published Krishna bhajan available yet.</div>`;
+
+  document.getElementById("aartiList").innerHTML =
+    aartis.length ? aartis.map(x => card(x, "Aarti")).join("") :
+    `<div class="item">No published Aarti available yet.</div>`;
+
+  document.getElementById("quoteList").innerHTML =
+    quoteRows.length ? quoteRows.map(x => card(x, "Quote")).join("") :
+    `<div class="item">No published quotes available yet.</div>`;
+}
+
+loadPublishedBhaktiContent();
 </script></body></html>
