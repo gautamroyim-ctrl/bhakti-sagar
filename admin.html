@@ -29,7 +29,8 @@ th{background:#faf7f2}
 .actions{white-space:nowrap}
 #adminArea{display:none}
 #message{margin:12px 0;font-weight:bold}
-.hidden{display:none}
+.preview{max-width:220px;max-height:180px;object-fit:contain;border-radius:10px;margin:8px 0;display:none}
+.small{font-size:13px;color:#777}
 @media(max-width:650px){.container{padding:12px}table{font-size:13px}.actions{white-space:normal}}
 </style>
 </head>
@@ -40,7 +41,6 @@ th{background:#faf7f2}
 </header>
 
 <div class="container">
-
 <div class="card" id="loginArea">
 <h2>Admin Login</h2>
 <p>Login with your admin email and password.</p>
@@ -63,11 +63,12 @@ th{background:#faf7f2}
 <h2 id="formTitle">Add New Content</h2>
 <input type="hidden" id="editId">
 
+<label>Content Type</label>
 <select id="content_type">
-  <option value="bhajan">Bhajan</option>
-  <option value="gita_shlok">Gita Shlok</option>
-  <option value="aarti">Aarti</option>
-  <option value="quote">Daily Quote</option>
+<option value="bhajan">Bhajan</option>
+<option value="gita_shlok">Gita Shlok</option>
+<option value="aarti">Aarti</option>
+<option value="quote">Daily Quote</option>
 </select>
 
 <label>Category (Ram / Krishna / Geeta / Ramayan etc.)</label>
@@ -91,8 +92,21 @@ th{background:#faf7f2}
 <label>Explanation / Meaning</label>
 <textarea id="explanation" placeholder="Meaning or explanation"></textarea>
 
-<label>Media URL (optional)</label>
-<input id="media_url" placeholder="Audio or image URL">
+<hr>
+<h3>🖼️ Add Image</h3>
+<label>Upload Image From Computer</label>
+<input id="image_file" type="file" accept="image/png,image/jpeg,image/webp">
+<p class="small">Supported formats: JPG, PNG, WEBP. Maximum size: 5 MB.</p>
+
+<label>Or Add Image Using URL</label>
+<input id="image_url" type="url" placeholder="https://example.com/image.jpg">
+
+<img id="imagePreview" class="preview" alt="Image preview">
+<button type="button" class="secondary" onclick="clearImage()">Remove Selected Image</button>
+
+<hr>
+<label>Media URL (Audio, optional)</label>
+<input id="media_url" placeholder="Audio URL">
 
 <label>Publish Date</label>
 <input id="publish_date" type="date">
@@ -123,9 +137,7 @@ th{background:#faf7f2}
 <div style="overflow-x:auto">
 <table>
 <thead>
-<tr>
-<th>Title</th><th>Type</th><th>Category</th><th>Status</th><th>Actions</th>
-</tr>
+<tr><th>Title</th><th>Image</th><th>Type</th><th>Category</th><th>Status</th><th>Actions</th></tr>
 </thead>
 <tbody id="contentList"></tbody>
 </table>
@@ -137,9 +149,10 @@ th{background:#faf7f2}
 <script>
 const SUPABASE_URL = "https://oibpfwbuzjbumgwvhoqb.supabase.co";
 const SUPABASE_KEY = "sb_publishable_wlC6YV3wl9v_gPvVmZSNPA_YcZQuDVa";
-
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const BUCKET = "bhakti-images";
 let contents = [];
+let selectedImageFile = null;
 
 async function checkSession(){
   const {data:{session}} = await db.auth.getSession();
@@ -199,6 +212,7 @@ function renderContent(){
   tbody.innerHTML=contents.map(c=>`
     <tr>
       <td>${esc(c.title)}</td>
+      <td>${c.image_url ? `<img src="${esc(c.image_url)}" width="55" alt="Content image">` : "—"}</td>
       <td>${esc(c.content_type)}</td>
       <td>${esc(c.category)}</td>
       <td>${esc(c.status)}</td>
@@ -210,8 +224,77 @@ function renderContent(){
   `).join("");
 }
 
+function showPreview(url){
+  const preview=document.getElementById("imagePreview");
+  if(url){
+    preview.src=url;
+    preview.style.display="block";
+    preview.onerror=()=>{preview.style.display="none";};
+  }else{
+    preview.removeAttribute("src");
+    preview.style.display="none";
+  }
+}
+
+document.getElementById("image_file").addEventListener("change",function(){
+  const file=this.files[0];
+  if(!file)return;
+  if(!["image/jpeg","image/png","image/webp"].includes(file.type)){
+    alert("Please select a JPG, PNG or WEBP image.");
+    this.value="";
+    selectedImageFile=null;
+    return;
+  }
+  if(file.size>5*1024*1024){
+    alert("Image size must be 5 MB or less.");
+    this.value="";
+    selectedImageFile=null;
+    return;
+  }
+  selectedImageFile=file;
+  document.getElementById("image_url").value="";
+  showPreview(URL.createObjectURL(file));
+});
+
+document.getElementById("image_url").addEventListener("input",function(){
+  selectedImageFile=null;
+  document.getElementById("image_file").value="";
+  showPreview(this.value.trim());
+});
+
+function clearImage(){
+  selectedImageFile=null;
+  document.getElementById("image_file").value="";
+  document.getElementById("image_url").value="";
+  showPreview("");
+}
+
+async function saveImage(){
+  const urlInput=document.getElementById("image_url").value.trim();
+  if(selectedImageFile){
+    const ext=selectedImageFile.name.split(".").pop().toLowerCase();
+    const path=`${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const {error}=await db.storage.from(BUCKET).upload(path,selectedImageFile,{
+      cacheControl:"3600",
+      upsert:false,
+      contentType:selectedImageFile.type
+    });
+    if(error) throw new Error("Image upload failed: "+error.message);
+    const {data}=db.storage.from(BUCKET).getPublicUrl(path);
+    return data.publicUrl;
+  }
+  if(urlInput){
+    let parsed;
+    try{parsed=new URL(urlInput);}catch(e){throw new Error("Please enter a valid image URL.");}
+    if(!["http:","https:"].includes(parsed.protocol))throw new Error("Image URL must start with http:// or https://");
+    return urlInput;
+  }
+  return document.getElementById("imagePreview").src || null;
+}
+
 async function saveContent(){
   const id=document.getElementById("editId").value;
+  const msg=document.getElementById("saveMsg");
   const payload={
     content_type:document.getElementById("content_type").value,
     category:document.getElementById("category").value.trim(),
@@ -228,11 +311,17 @@ async function saveContent(){
   };
 
   if(!payload.title){
-    document.getElementById("saveMsg").textContent="Please enter a title.";
+    msg.textContent="Please enter a title.";
     return;
   }
 
-  document.getElementById("saveMsg").textContent="Saving...";
+  msg.textContent="Saving...";
+  try{
+    payload.image_url=await saveImage();
+  }catch(error){
+    msg.textContent=error.message;
+    return;
+  }
 
   let result;
   if(id){
@@ -242,17 +331,17 @@ async function saveContent(){
   }
 
   if(result.error){
-    document.getElementById("saveMsg").textContent="Error: "+result.error.message;
+    msg.textContent="Error: "+result.error.message;
     return;
   }
 
-  document.getElementById("saveMsg").textContent="Saved successfully!";
+  msg.textContent="Saved successfully!";
   resetForm();
-  loadContent();
+  await loadContent();
 }
 
 function editContent(id){
-  const c=contents.find(x=>x.id===id);
+  const c=contents.find(x=>String(x.id)===String(id));
   if(!c)return;
   document.getElementById("editId").value=c.id;
   document.getElementById("content_type").value=c.content_type||"bhajan";
@@ -264,6 +353,10 @@ function editContent(id){
   document.getElementById("hinglish").value=c.hinglish||"";
   document.getElementById("explanation").value=c.explanation||"";
   document.getElementById("media_url").value=c.media_url||"";
+  document.getElementById("image_url").value=c.image_url||"";
+  document.getElementById("image_file").value="";
+  selectedImageFile=null;
+  showPreview(c.image_url||"");
   document.getElementById("publish_date").value=c.publish_date||"";
   document.getElementById("status").value=c.status||"draft";
   document.getElementById("formTitle").textContent="Edit Content";
@@ -274,17 +367,17 @@ async function deleteContent(id){
   if(!confirm("Are you sure you want to delete this content?"))return;
   const {error}=await db.from("devotional_content").delete().eq("id",id);
   if(error){alert("Delete error: "+error.message);return;}
-  loadContent();
+  await loadContent();
 }
 
 function resetForm(){
   document.getElementById("editId").value="";
   ["category","title","sanskrit","hindi","english","hinglish","explanation","media_url","publish_date"].forEach(id=>document.getElementById(id).value="");
-  document.getElementById("content_type").value="Bhajan";
+  document.getElementById("content_type").value="bhajan";
   document.getElementById("status").value="draft";
   document.getElementById("formTitle").textContent="Add New Content";
+  clearImage();
 }
 </script>
 </body>
 </html>
-
